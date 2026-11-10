@@ -296,5 +296,9 @@ async def sesgirrazer(interaction: discord.Interaction, kanal: discord.VoiceChan
 # --- RENDER ÇALIŞTIRMA ---
 if __name__ == "__main__":
     keep_alive()
-    TOKEN = os.getenv("DISCORD_TOKEN") or "TOKEN_BURAYA"
-    bot.run(TOKEN)
+    TOKEN = os.environ.get("DISCORD_TOKEN")
+    
+    if not TOKEN:
+        print("❌ HATA: DISCORD_TOKEN bulunamadı! Render Environment Variables kısmını kontrol et.")
+    else:
+        bot.run(TOKEN)
