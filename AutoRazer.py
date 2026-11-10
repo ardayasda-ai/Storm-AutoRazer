@@ -41,26 +41,29 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
     tag_input = discord.ui.TextInput(
         label="Bio / Guild İçin Aranacak Tag",
         placeholder=".gg/stormpack",
-        required=True
+        required=True,
+        max_length=100
     )
     erisim_rol_id = discord.ui.TextInput(
-        label="Butonları Kullanacak Yetkili Rol ID",
-        placeholder="Yetkili Rol ID'sini buraya yapıştırın",
-        required=True
+        label="Yetkili Erişim Rol ID",
+        placeholder="Sadece bu ID'ye sahip olanlar onaylayabilir",
+        required=True,
+        max_length=30
     )
     boost_rol_id = discord.ui.TextInput(
         label="2x Boost Rol ID",
         placeholder="Rol ID'sini buraya yapıştırın",
-        required=True
+        required=True,
+        max_length=30
     )
     bio_rol_id = discord.ui.TextInput(
         label="Bio / Guild Rol ID",
         placeholder="Rol ID'sini buraya yapıştırın",
-        required=True
+        required=True,
+        max_length=30
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 3 saniye zaman aşımı hatasını (Uygulama yanıt vermedi) önlemek için önce defer atıyoruz
         await interaction.response.defer(ephemeral=True)
 
         guild_id = interaction.guild.id
@@ -74,16 +77,16 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
             SERVER_CONFIGS[guild_id]["tag"] = self.tag_input.value.strip()
 
             await interaction.followup.send(
-                f"✅ **AutoRazer Güvenli Buton Sistemi Yapılandırıldı!**\n"
+                f"✅ **AutoRazer Sistemi Başarıyla Yapılandırıldı!**\n"
                 f"• **Tag Kriteri:** `{self.tag_input.value}`\n"
                 f"• **Yetkili Erişim Rol ID:** `{self.erisim_rol_id.value}`\n"
                 f"• **Boost Rol ID:** `{self.boost_rol_id.value}`\n"
                 f"• **Bio/Guild Rol ID:** `{self.bio_rol_id.value}`\n\n"
-                f"*Artık butonları sadece belirttiğin roldekiler kullanabilecek, şartlar bozulursa roller geri alınacaktır.*",
+                f"*Sistem hazır: Yetkili rolündekiler kanıtları butonla onaylayabilecek, şartlar bozulursa roller geri alınacaktır.*",
                 ephemeral=True
             )
         except ValueError:
-            await interaction.followup.send("❌ Lütfen Rol ID kısımlarına sadece sayısal ID giriniz!", ephemeral=True)
+            await interaction.followup.send("❌ Hata: Rol ID alanlarına yalnızca sayısal ID değerleri girmelisin!", ephemeral=True)
 
 
 # --- YETKİLİ ONAY/RED BUTONLARI ---
@@ -163,7 +166,7 @@ class KanitOnayButonlari(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    print(f"🤖 {bot.user.name} (AutoRazer) güvenli butonlu sistemle aktif!")
+    print(f"🤖 {bot.user.name} (AutoRazer) butonlu sistemle aktif!")
     print("Authorized By Zynex")
     try:
         synced = await bot.tree.sync()
