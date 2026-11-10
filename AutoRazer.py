@@ -10,7 +10,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "AutoRazer AI Güvenlik Botu Aktif! Authorized By Zynex"
+    return "AutoRazer Bot Aktif ve Çalışıyor! Authorized By Zynex"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -37,9 +37,9 @@ SERVER_CONFIGS = {}
 BOOST_COOLDOWN = {}
 
 
-class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Yapılandırma"):
+class RolAyarModal(discord.ui.Modal, title="AutoRazer Yapılandırma Panel"):
     tag_input = discord.ui.TextInput(
-        label="Bio / Guild İçin Zorunlu Tag",
+        label="Bio / Guild Tag Bilgisi",
         placeholder=".gg/stormpack",
         required=True
     )
@@ -65,11 +65,11 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Yapılandırma"):
             SERVER_CONFIGS[guild_id]["tag"] = self.tag_input.value.strip()
 
             await interaction.response.send_message(
-                f"✅ **AutoRazer Akıllı AI Güvenlik Filtresi Aktif!**\n"
-                f"• **Zorunlu Tag:** `{self.tag_input.value}`\n"
+                f"✅ **AutoRazer Sistemi Başarıyla Yapılandırıldı!**\n"
+                f"• **Tag/Bio Kriteri:** `{self.tag_input.value}`\n"
                 f"• **Boost Rol ID:** `{self.boost_rol_id.value}`\n"
                 f"• **Bio/Guild Rol ID:** `{self.bio_rol_id.value}`\n\n"
-                f"*Artık rastgele görsel veya şartları taşımayan kanıtlar otomatik olarak reddedilecek; şartlar bozulduğunda roller anında geri alınacaktır.*",
+                f"*Kanıt kanallarına görsel atıldığında roller anında verilecek; şartlar bozulduğunda saniyesinde geri alınacaktır.*",
                 ephemeral=True
             )
         except ValueError:
@@ -78,7 +78,7 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Yapılandırma"):
 
 @bot.event
 async def on_ready():
-    print(f"🤖 {bot.user.name} (AutoRazer) güvenlik filtresiyle aktif!")
+    print(f"🤖 {bot.user.name} (AutoRazer) aktif ve görevde!")
     print("Authorized By Zynex")
     try:
         synced = await bot.tree.sync()
@@ -121,7 +121,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                 print(f"Boost çıkarma hatası ({after.name}): {e}")
 
 
-# --- KANIT VE AKILLI AI DOĞRULAMA DİNLEYİCİSİ ---
+# --- KANIT VE GÖRSEL KONTROLÜ (ANINDA ROL VERME) ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -172,53 +172,8 @@ async def on_message(message):
             return
 
         member = message.author
-        target_tag = config.get("tag", "").lower()
 
-        # 3. KISITLAYICI AI ŞART DENETİMİ (Rastgele şeylerin onaylanmasını engeller)
-        if is_boost:
-            # Kullanıcının gerçekten sunucuda aktif boostu var mı?
-            if member.premium_since is None:
-                try:
-                    await message.delete()
-                    red_mesaji = await message.channel.send(
-                        f"❌ {message.author.mention}, **AI Güvenlik Reddi!**\n"
-                        f"Sunucumuzda aktif bir 2x Boost takviyen tespit edilemedi. Lütfen geçerli bir boost kanıtı at."
-                    )
-                    await discord.utils.sleep_until(discord.utils.utcnow() + discord.timedelta(seconds=7))
-                    await red_mesaji.delete()
-                except:
-                    pass
-                return
-        else:
-            # Bio / Guild Kanalı Kontrolü (İsimde, takma ad veya guild rozetinde tag geçiyor mu?)
-            user_name = member.name.lower()
-            user_nick = (member.nick or "").lower()
-            
-            # Profil detaylı çekimi (Guild/Bio doğrulaması)
-            profile_has_tag = False
-            try:
-                profile = await member.fetch_profile()
-                user_bio = (profile.bio or "").lower()
-                profile_has_tag = target_tag in user_bio
-            except:
-                user_bio = ""
-
-            sart_saglandi = target_tag in user_name or target_tag in user_nick or profile_has_tag
-
-            if not sart_saglandi:
-                try:
-                    await message.delete()
-                    red_mesaji = await message.channel.send(
-                        f"❌ {message.author.mention}, **AI Güvenlik Reddi!**\n"
-                        f"Profilinde veya isminde gerekli olan `{target_tag}` tagi bulunamadı. Lütfen tagi ekleyip tekrar dene."
-                    )
-                    await discord.utils.sleep_until(discord.utils.utcnow() + discord.timedelta(seconds=7))
-                    await red_mesaji.delete()
-                except:
-                    pass
-                return
-
-        # 4. TÜM ŞARTLAR DOĞRULANDI - ROLÜ VER VE LOGLA
+        # 3. KANIT ONAYLANDI - ROLÜ ANINDA VER VE LOGLA
         assigned_role = None
         if is_boost:
             assigned_role = guild.get_role(config.get("boost_rol_id"))
@@ -231,15 +186,15 @@ async def on_message(message):
             except Exception as e:
                 print(f"Rol verme hatası ({member.name}): {e}")
 
-        tur_adi = "🚀 2x Boost AI Onay" if is_boost else "🟩🟨 Bio / Guild AI Onay"
+        tur_adi = "🚀 2x Boost Kanıt Onayı" if is_boost else "🟩🟨 Bio / Guild Kanıt Onayı"
         
         embed = discord.Embed(
             title=f"🤖 {tur_adi}",
             description=f"**Kullanıcı:** {member.mention}\n"
                         f"**Kullanıcı ID:** `{member.id}`\n"
-                        f"**Durum:** `✅ Güvenlik Filtresinden Geçti ve Rolü Verildi`",
-                        color=discord.Color.green(),
-                        timestamp=datetime.datetime.now()
+                        f"**Durum:** `✅ Kanıt Doğrulandı ve Rolü Verildi`",
+            color=discord.Color.green(),
+            timestamp=datetime.datetime.now()
         )
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
         embed.set_image(url=message.attachments[0].url)
@@ -255,7 +210,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-# --- SIKI ARKA PLAN KONTROLÜ (ŞART BOZULURSA PERMİ ANINDA GERİ ALMA) ---
+# --- SIKI ARKA PLAN KONTROLÜ (BOOST ÇEKİLİRSE PERMİ GERİ ALMA) ---
 @tasks.loop(seconds=10)
 async def guvenlik_ve_durum_denetimi():
     for guild in bot.guilds:
@@ -264,44 +219,10 @@ async def guvenlik_ve_durum_denetimi():
             continue
 
         boost_rol_id = config.get("boost_rol_id")
-        bio_rol_id = config.get("bio_rol_id")
-        target_tag = config.get("tag", "").lower()
-        
         boost_role = guild.get_role(boost_rol_id)
-        bio_role = guild.get_role(bio_rol_id)
         boost_log_id = config.get("boost_kanit")
-        bio_log_id = config.get("bio_kanit")
 
-        # 1. Bio/Guild Rolüne Sahip Olanların Tag Kontrolü
-        if bio_role and target_tag:
-            for member in list(bio_role.members):
-                if member.bot:
-                    continue
-                try:
-                    profile = await member.fetch_profile()
-                    user_bio = (profile.bio or "").lower()
-                    user_name = member.name.lower()
-                    user_nick = (member.nick or "").lower()
-                    
-                    has_tag = target_tag in user_bio or target_tag in user_name or target_tag in user_nick
-
-                    if not has_tag:
-                        await member.remove_roles(bio_role)
-                        if bio_log_id:
-                            log_ch = guild.get_channel(bio_log_id)
-                            if log_ch:
-                                embed = discord.Embed(
-                                    title="🛑 Bio / Tag Kaldırıldı (Rol Geri Alındı)",
-                                    description=f"**Kullanıcı:** {member.mention}\n**Kullanıcı ID:** `{member.id}`\n\n⚠️ Kullanıcı `{target_tag}` tagini kaldırdığı için rolü otomatik geri alındı.",
-                                    color=discord.Color.red(),
-                                    timestamp=datetime.datetime.now()
-                                )
-                                embed.set_footer(text="Authorized By Zynex")
-                                await log_ch.send(embed=embed)
-                except Exception as e:
-                    print(f"Arka plan bio denetim hatası: {e}")
-
-        # 2. Boost Rolüne Sahip Olanların Takviye Kontrolü
+        # Boost Rolüne Sahip Olanların Takviye Kontrolü
         if boost_role:
             for member in list(boost_role.members):
                 if member.bot:
@@ -326,7 +247,7 @@ async def guvenlik_ve_durum_denetimi():
 
 # --- SLASH KOMUTLARI ---
 
-@bot.tree.command(name="rolayarla", description="⚙️ Güvenli sistem için tag ve rol ID'lerini ayarlar.")
+@bot.tree.command(name="rolayarla", description="⚙️ Sistem için tag ve rol ID'lerini ayarlar.")
 async def rolayarla(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.", ephemeral=True)
@@ -334,7 +255,7 @@ async def rolayarla(interaction: discord.Interaction):
     await interaction.response.send_modal(RolAyarModal())
 
 
-@bot.tree.command(name="logpanelkurrazer", description="🚀 Güvenli AI kanıt panellerini kurar.")
+@bot.tree.command(name="logpanelkurrazer", description="🚀 Kanıt panellerini kurar.")
 async def logpanelkurrazer(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.", ephemeral=True)
@@ -346,7 +267,7 @@ async def logpanelkurrazer(interaction: discord.Interaction):
         guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
     }
 
-    kategori = await guild.create_category("🚀 AUTO RAZER GÜVENLİ PANEL", overwrites=overwrites)
+    kategori = await guild.create_category("🚀 AUTO RAZER PANEL", overwrites=overwrites)
     boost_kanali = await guild.create_text_channel("🚀-2x-boost-kanıt", category=kategori)
     bio_kanali = await guild.create_text_channel("🟩-bio-guild-kanıt", category=kategori)
 
@@ -358,7 +279,7 @@ async def logpanelkurrazer(interaction: discord.Interaction):
     })
 
     embed = discord.Embed(
-        title="⚙️ AutoRazer Güvenli Paneli Kuruldu",
+        title="⚙️ AutoRazer Paneli Kuruldu",
         description=f"Kanıt kanalları oluşturuldu:\n\n• {boost_kanali.mention}\n• {bio_kanali.mention}\n\n*Not: `/rolayarla` ile rolleri bağlamayı unutma!*",
         color=discord.Color.blue()
     )
