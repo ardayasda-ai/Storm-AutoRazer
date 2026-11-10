@@ -44,7 +44,7 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
         required=True
     )
     erisim_rol_id = discord.ui.TextInput(
-        label="Butonları Kullanacak Yetkili Rol ID (Örn: Storm Team)",
+        label="Butonları Kullanacak Yetkili Rol ID",
         placeholder="Yetkili Rol ID'sini buraya yapıştırın",
         required=True
     )
@@ -60,6 +60,9 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        # 3 saniye zaman aşımı hatasını (Uygulama yanıt vermedi) önlemek için önce defer atıyoruz
+        await interaction.response.defer(ephemeral=True)
+
         guild_id = interaction.guild.id
         if guild_id not in SERVER_CONFIGS:
             SERVER_CONFIGS[guild_id] = {}
@@ -70,7 +73,7 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
             SERVER_CONFIGS[guild_id]["bio_rol_id"] = int(self.bio_rol_id.value.strip())
             SERVER_CONFIGS[guild_id]["tag"] = self.tag_input.value.strip()
 
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"✅ **AutoRazer Güvenli Buton Sistemi Yapılandırıldı!**\n"
                 f"• **Tag Kriteri:** `{self.tag_input.value}`\n"
                 f"• **Yetkili Erişim Rol ID:** `{self.erisim_rol_id.value}`\n"
@@ -80,7 +83,7 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandı
                 ephemeral=True
             )
         except ValueError:
-            await interaction.response.send_message("❌ Lütfen Rol ID kısımlarına sadece sayısal ID giriniz!", ephemeral=True)
+            await interaction.followup.send("❌ Lütfen Rol ID kısımlarına sadece sayısal ID giriniz!", ephemeral=True)
 
 
 # --- YETKİLİ ONAY/RED BUTONLARI ---
@@ -90,7 +93,6 @@ class KanitOnayButonlari(discord.ui.View):
         self.user_id = user_id
         self.kanit_turu = kanit_turu # "boost" veya "bio"
 
-    # Belirlenen Erişim Rolü veya Yönetici Kontrolü
     def yetkili_mi(self, interaction: discord.Interaction) -> bool:
         if interaction.user.guild_permissions.administrator:
             return True
