@@ -30,17 +30,22 @@ intents.presences = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Sunucu Yapılandırma Deposu
-# { guild_id: { "boost_rol_id": id, "bio_rol_id": id, "tag": ".gg/stormpack", "boost_kanit": id, "bio_kanit": id } }
+# { guild_id: { "boost_rol_id": id, "bio_rol_id": id, "erisim_rol_id": id, "tag": ".gg/stormpack", "boost_kanit": id, "bio_kanit": id } }
 SERVER_CONFIGS = {}
 
 # Cooldown Takibi (Kullanıcı ID: Son Kanıt Zamanı)
 BOOST_COOLDOWN = {}
 
 
-class RolAyarModal(discord.ui.Modal, title="AutoRazer Butonlu Sistem Yapılandırma"):
+class RolAyarModal(discord.ui.Modal, title="AutoRazer Güvenli Buton Yapılandırma"):
     tag_input = discord.ui.TextInput(
         label="Bio / Guild İçin Aranacak Tag",
         placeholder=".gg/stormpack",
+        required=True
+    )
+    erisim_rol_id = discord.ui.TextInput(
+        label="Butonları Kullanacak Yetkili Rol ID (Örn: Storm Team)",
+        placeholder="Yetkili Rol ID'sini buraya yapıştırın",
         required=True
     )
     boost_rol_id = discord.ui.TextInput(
@@ -60,16 +65,18 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Butonlu Sistem Yapılandı
             SERVER_CONFIGS[guild_id] = {}
 
         try:
+            SERVER_CONFIGS[guild_id]["erisim_rol_id"] = int(self.erisim_rol_id.value.strip())
             SERVER_CONFIGS[guild_id]["boost_rol_id"] = int(self.boost_rol_id.value.strip())
             SERVER_CONFIGS[guild_id]["bio_rol_id"] = int(self.bio_rol_id.value.strip())
             SERVER_CONFIGS[guild_id]["tag"] = self.tag_input.value.strip()
 
             await interaction.response.send_message(
-                f"✅ **AutoRazer Butonlu Sistem Yapılandırıldı!**\n"
+                f"✅ **AutoRazer Güvenli Buton Sistemi Yapılandırıldı!**\n"
                 f"• **Tag Kriteri:** `{self.tag_input.value}`\n"
+                f"• **Yetkili Erişim Rol ID:** `{self.erisim_rol_id.value}`\n"
                 f"• **Boost Rol ID:** `{self.boost_rol_id.value}`\n"
                 f"• **Bio/Guild Rol ID:** `{self.bio_rol_id.value}`\n\n"
-                f"*Sistem aktif: Kanıtlar butonlarla onaylanacak, sonradan çekilirse roller otomatik geri alınacaktır.*",
+                f"*Artık butonları sadece belirttiğin roldekiler kullanabilecek, şartlar bozulursa roller geri alınacaktır.*",
                 ephemeral=True
             )
         except ValueError:
@@ -83,19 +90,26 @@ class KanitOnayButonlari(discord.ui.View):
         self.user_id = user_id
         self.kanit_turu = kanit_turu # "boost" veya "bio"
 
-    # Storm Team veya Yönetici Yetkisi Kontrolü
-    def yetkili_mi(self, member: discord.Member) -> bool:
-        if member.guild_permissions.administrator:
+    # Belirlenen Erişim Rolü veya Yönetici Kontrolü
+    def yetkili_mi(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.guild_permissions.administrator:
             return True
-        for role in member.roles:
-            if "storm team" in role.name.lower():
+        
+        guild_id = interaction.guild.id
+        config = SERVER_CONFIGS.get(guild_id)
+        if not config:
+            return False
+        
+        erisim_rol_id = config.get("erisim_rol_id")
+        for role in interaction.user.roles:
+            if role.id == erisim_rol_id:
                 return True
         return False
 
     @discord.ui.button(label="Onayla", style=discord.ButtonStyle.green, custom_id="storm_onayla_btn")
     async def onayla(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.yetkili_mi(interaction.user):
-            await interaction.response.send_message("❌ Bu butonları sadece **Storm Team** veya yöneticiler kullanabilir!", ephemeral=True)
+        if not self.yetkili_mi(interaction):
+            await interaction.response.send_message("❌ Bu butonları kullanmak için yetkili erişim rolüne sahip olmalısın!", ephemeral=True)
             return
 
         guild = interaction.guild
@@ -130,8 +144,8 @@ class KanitOnayButonlari(discord.ui.View):
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.red, custom_id="storm_reddet_btn")
     async def reddet(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.yetkili_mi(interaction.user):
-            await interaction.response.send_message("❌ Bu butonları sadece **Storm Team** veya yöneticiler kullanabilir!", ephemeral=True)
+        if not self.yetkili_mi(interaction):
+            await interaction.response.send_message("❌ Bu butonları kullanmak için yetkili erişim rolüne sahip olmalısın!", ephemeral=True)
             return
 
         embed = interaction.message.embeds[0]
@@ -147,7 +161,7 @@ class KanitOnayButonlari(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    print(f"🤖 {bot.user.name} (AutoRazer) butonlu sistemle aktif!")
+    print(f"🤖 {bot.user.name} (AutoRazer) güvenli butonlu sistemle aktif!")
     print("Authorized By Zynex")
     try:
         synced = await bot.tree.sync()
@@ -302,7 +316,7 @@ async def guvenlik_ve_durum_denetimi():
 
 # --- SLASH KOMUTLARI ---
 
-@bot.tree.command(name="rolayarla", description="⚙️ Sistem için tag ve rol ID'lerini ayarlar.")
+@bot.tree.command(name="rolayarla", description="⚙️ Sistem için yetkili rolü, tag ve rol ID'lerini ayarlar.")
 async def rolayarla(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Bu komutu kullanmak için Yönetici yetkisine sahip olmalısın.", ephemeral=True)
@@ -322,7 +336,7 @@ async def logpanelkurrazer(interaction: discord.Interaction):
         guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
     }
 
-    kategori = await guild.create_category("🚀 AUTO RAZER BUTONLU PANEL", overwrites=overwrites)
+    kategori = await guild.create_category("🚀 AUTO RAZER YETKİLİ PANEL", overwrites=overwrites)
     boost_kanali = await guild.create_text_channel("🚀-2x-boost-kanıt", category=kategori)
     bio_kanali = await guild.create_text_channel("🟩-bio-guild-kanıt", category=kategori)
 
@@ -334,8 +348,8 @@ async def logpanelkurrazer(interaction: discord.Interaction):
     })
 
     embed = discord.Embed(
-        title="⚙️ AutoRazer Butonlu Paneli Kuruldu",
-        description=f"Kanıt kanalları oluşturuldu:\n\n• {boost_kanali.mention}\n• {bio_kanali.mention}\n\n*Not: `/rolayarla` ile rolleri bağlamayı unutma!*",
+        title="⚙️ AutoRazer Yetkili Paneli Kuruldu",
+        description=f"Kanıt kanalları oluşturuldu:\n\n• {boost_kanali.mention}\n• {bio_kanali.mention}\n\n*Not: `/rolayarla` komutu ile yetkili erişim rolünü ve rolleri bağlamayı unutma!*",
         color=discord.Color.blue()
     )
     embed.set_footer(text="Authorized By Zynex")
