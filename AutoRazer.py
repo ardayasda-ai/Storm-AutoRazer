@@ -37,9 +37,9 @@ SERVER_CONFIGS = {}
 BOOST_COOLDOWN = {}
 
 
-class RolAyarModal(discord.ui.Modal, title="AutoRazer Yapılandırma Panel"):
+class RolAyarModal(discord.ui.Modal, title="AutoRazer Butonlu Sistem Yapılandırma"):
     tag_input = discord.ui.TextInput(
-        label="Bio / Guild Tag Bilgisi",
+        label="Bio / Guild İçin Aranacak Tag",
         placeholder=".gg/stormpack",
         required=True
     )
@@ -65,20 +65,89 @@ class RolAyarModal(discord.ui.Modal, title="AutoRazer Yapılandırma Panel"):
             SERVER_CONFIGS[guild_id]["tag"] = self.tag_input.value.strip()
 
             await interaction.response.send_message(
-                f"✅ **AutoRazer Sistemi Başarıyla Yapılandırıldı!**\n"
-                f"• **Tag/Bio Kriteri:** `{self.tag_input.value}`\n"
+                f"✅ **AutoRazer Butonlu Sistem Yapılandırıldı!**\n"
+                f"• **Tag Kriteri:** `{self.tag_input.value}`\n"
                 f"• **Boost Rol ID:** `{self.boost_rol_id.value}`\n"
                 f"• **Bio/Guild Rol ID:** `{self.bio_rol_id.value}`\n\n"
-                f"*Kanıt kanallarına görsel atıldığında roller anında verilecek; şartlar bozulduğunda saniyesinde geri alınacaktır.*",
+                f"*Sistem aktif: Kanıtlar butonlarla onaylanacak, sonradan çekilirse roller otomatik geri alınacaktır.*",
                 ephemeral=True
             )
         except ValueError:
             await interaction.response.send_message("❌ Lütfen Rol ID kısımlarına sadece sayısal ID giriniz!", ephemeral=True)
 
 
+# --- YETKİLİ ONAY/RED BUTONLARI ---
+class KanitOnayButonlari(discord.ui.View):
+    def __init__(self, user_id: int, kanit_turu: str):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        self.kanit_turu = kanit_turu # "boost" veya "bio"
+
+    # Storm Team veya Yönetici Yetkisi Kontrolü
+    def yetkili_mi(self, member: discord.Member) -> bool:
+        if member.guild_permissions.administrator:
+            return True
+        for role in member.roles:
+            if "storm team" in role.name.lower():
+                return True
+        return False
+
+    @discord.ui.button(label="Onayla", style=discord.ButtonStyle.green, custom_id="storm_onayla_btn")
+    async def onayla(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.yetkili_mi(interaction.user):
+            await interaction.response.send_message("❌ Bu butonları sadece **Storm Team** veya yöneticiler kullanabilir!", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        member = guild.get_member(self.user_id)
+        config = SERVER_CONFIGS.get(guild.id)
+
+        if not config:
+            await interaction.response.send_message("⚠️ Önce `/rolayarla` ile roller ayarlanmalıdır!", ephemeral=True)
+            return
+
+        assigned_role = None
+        if self.kanit_turu == "boost":
+            assigned_role = guild.get_role(config.get("boost_rol_id"))
+        else:
+            assigned_role = guild.get_role(config.get("bio_rol_id"))
+
+        if member and assigned_role:
+            try:
+                await member.add_roles(assigned_role)
+            except Exception as e:
+                print(f"Rol verme hatası: {e}")
+
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.green()
+        embed.add_field(name="🚀 Durum", value=f"✅ Onaylayan Yetkili: {interaction.user.mention}", inline=False)
+        
+        for child in self.children:
+            child.disabled = True
+
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.response.send_message(f"✅ Kanıt başarıyla onaylandı ve {member.mention if member else 'kullanıcıya'} rolü verildi!", ephemeral=True)
+
+    @discord.ui.button(label="Reddet", style=discord.ButtonStyle.red, custom_id="storm_reddet_btn")
+    async def reddet(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.yetkili_mi(interaction.user):
+            await interaction.response.send_message("❌ Bu butonları sadece **Storm Team** veya yöneticiler kullanabilir!", ephemeral=True)
+            return
+
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.red()
+        embed.add_field(name="🛑 Durum", value=f"❌ Reddeden Yetkili: {interaction.user.mention}", inline=False)
+        
+        for child in self.children:
+            child.disabled = True
+
+        await interaction.message.edit(embed=embed, view=self)
+        await interaction.response.send_message("🛑 Kanıt reddedildi.", ephemeral=True)
+
+
 @bot.event
 async def on_ready():
-    print(f"🤖 {bot.user.name} (AutoRazer) aktif ve görevde!")
+    print(f"🤖 {bot.user.name} (AutoRazer) butonlu sistemle aktif!")
     print("Authorized By Zynex")
     try:
         synced = await bot.tree.sync()
@@ -88,40 +157,7 @@ async def on_ready():
     guvenlik_ve_durum_denetimi.start()
 
 
-# --- ANLIK BOOST DEĞİŞİM DİNLENMESİ ---
-@bot.event
-async def on_member_update(before: discord.Member, after: discord.Member):
-    guild = after.guild
-    config = SERVER_CONFIGS.get(guild.id)
-    if not config:
-        return
-
-    boost_rol_id = config.get("boost_rol_id")
-    boost_role = guild.get_role(boost_rol_id)
-    boost_log_id = config.get("boost_kanit")
-
-    # Boost Çekildiğinde veya Aktarıldığında Anında Çalışır
-    if before.premium_since is not None and after.premium_since is None:
-        if boost_role and boost_role in after.roles:
-            try:
-                await after.remove_roles(boost_role)
-                if boost_log_id:
-                    log_ch = guild.get_channel(boost_log_id)
-                    if log_ch:
-                        embed = discord.Embed(
-                            title="🚨 2x Boost İptal Edildi / Çekildi",
-                            description=f"**Kullanıcı:** {after.mention}\n**Kullanıcı ID:** `{after.id}`\n\n"
-                                        f"⚠️ Kullanıcı takviyesini çektiği veya başka yere taşıdığı için `{boost_role.name}` rolü otomatik geri alındı.",
-                            color=discord.Color.red(),
-                            timestamp=datetime.datetime.now()
-                        )
-                        embed.set_footer(text="Authorized By Zynex", icon_url=bot.user.avatar.url if bot.user.avatar else None)
-                        await log_ch.send(embed=embed)
-            except Exception as e:
-                print(f"Boost çıkarma hatası ({after.name}): {e}")
-
-
-# --- KANIT VE GÖRSEL KONTROLÜ (ANINDA ROL VERME) ---
+# --- KANIT KANAL DİNLEYİCİSİ ---
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -171,46 +207,31 @@ async def on_message(message):
                 pass
             return
 
-        member = message.author
-
-        # 3. KANIT ONAYLANDI - ROLÜ ANINDA VER VE LOGLA
-        assigned_role = None
-        if is_boost:
-            assigned_role = guild.get_role(config.get("boost_rol_id"))
-        else:
-            assigned_role = guild.get_role(config.get("bio_rol_id"))
-
-        if assigned_role:
-            try:
-                await member.add_roles(assigned_role)
-            except Exception as e:
-                print(f"Rol verme hatası ({member.name}): {e}")
-
-        tur_adi = "🚀 2x Boost Kanıt Onayı" if is_boost else "🟩🟨 Bio / Guild Kanıt Onayı"
+        tur_adi = "🚀 2x Boost Kanıtı" if is_boost else "🟩🟨 Bio / Guild Kanıtı"
         
         embed = discord.Embed(
-            title=f"🤖 {tur_adi}",
-            description=f"**Kullanıcı:** {member.mention}\n"
-                        f"**Kullanıcı ID:** `{member.id}`\n"
-                        f"**Durum:** `✅ Kanıt Doğrulandı ve Rolü Verildi`",
-            color=discord.Color.green(),
+            title=f"📥 Yeni {tur_adi}",
+            description=f"**Kullanıcı:** {message.author.mention}\n**Kullanıcı ID:** `{message.author.id}`\n**Gönderildiği Kanal:** {message.channel.mention}",
+            color=discord.Color.orange(),
             timestamp=datetime.datetime.now()
         )
-        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+        embed.set_thumbnail(url=message.author.avatar.url if message.author.avatar else message.author.default_avatar.url)
         embed.set_image(url=message.attachments[0].url)
         embed.set_footer(text="Authorized By Zynex", icon_url=bot.user.avatar.url if bot.user.avatar else None)
+
+        kanit_turu_str = "boost" if is_boost else "bio"
 
         try:
             await message.delete()
         except:
             pass
 
-        await message.channel.send(embed=embed)
+        await message.channel.send(embed=embed, view=KanitOnayButonlari(message.author.id, kanit_turu_str))
 
     await bot.process_commands(message)
 
 
-# --- SIKI ARKA PLAN KONTROLÜ (BOOST ÇEKİLİRSE PERMİ GERİ ALMA) ---
+# --- SIKI ARKA PLAN KONTROLÜ (ŞARTLAR BOZULURSA ROLÜ GERİ ALMA) ---
 @tasks.loop(seconds=10)
 async def guvenlik_ve_durum_denetimi():
     for guild in bot.guilds:
@@ -219,10 +240,44 @@ async def guvenlik_ve_durum_denetimi():
             continue
 
         boost_rol_id = config.get("boost_rol_id")
+        bio_rol_id = config.get("bio_rol_id")
+        target_tag = config.get("tag", "").lower()
+        
         boost_role = guild.get_role(boost_rol_id)
+        bio_role = guild.get_role(bio_rol_id)
         boost_log_id = config.get("boost_kanit")
+        bio_log_id = config.get("bio_kanit")
 
-        # Boost Rolüne Sahip Olanların Takviye Kontrolü
+        # 1. Bio / Guild Rolüne Sahip Olanların Tag Kontrolü
+        if bio_role and target_tag:
+            for member in list(bio_role.members):
+                if member.bot:
+                    continue
+                try:
+                    profile = await member.fetch_profile()
+                    user_bio = (profile.bio or "").lower()
+                    user_name = member.name.lower()
+                    user_nick = (member.nick or "").lower()
+                    
+                    has_tag = target_tag in user_bio or target_tag in user_name or target_tag in user_nick
+
+                    if not has_tag:
+                        await member.remove_roles(bio_role)
+                        if bio_log_id:
+                            log_ch = guild.get_channel(bio_log_id)
+                            if log_ch:
+                                embed = discord.Embed(
+                                    title="🛑 Bio / Tag Kaldırıldı (Rol Geri Alındı)",
+                                    description=f"**Kullanıcı:** {member.mention}\n**Kullanıcı ID:** `{member.id}`\n\n⚠️ Kullanıcı `{target_tag}` tagini kaldırdığı için rolü otomatik geri alındı.",
+                                    color=discord.Color.red(),
+                                    timestamp=datetime.datetime.now()
+                                )
+                                embed.set_footer(text="Authorized By Zynex")
+                                await log_ch.send(embed=embed)
+                except Exception as e:
+                    pass
+
+        # 2. Boost Rolüne Sahip Olanların Takviye Kontrolü
         if boost_role:
             for member in list(boost_role.members):
                 if member.bot:
@@ -242,7 +297,7 @@ async def guvenlik_ve_durum_denetimi():
                                 embed.set_footer(text="Authorized By Zynex")
                                 await log_ch.send(embed=embed)
                     except Exception as e:
-                        print(f"Arka plan boost denetim hatası: {e}")
+                        pass
 
 
 # --- SLASH KOMUTLARI ---
@@ -267,7 +322,7 @@ async def logpanelkurrazer(interaction: discord.Interaction):
         guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
     }
 
-    kategori = await guild.create_category("🚀 AUTO RAZER PANEL", overwrites=overwrites)
+    kategori = await guild.create_category("🚀 AUTO RAZER BUTONLU PANEL", overwrites=overwrites)
     boost_kanali = await guild.create_text_channel("🚀-2x-boost-kanıt", category=kategori)
     bio_kanali = await guild.create_text_channel("🟩-bio-guild-kanıt", category=kategori)
 
@@ -279,7 +334,7 @@ async def logpanelkurrazer(interaction: discord.Interaction):
     })
 
     embed = discord.Embed(
-        title="⚙️ AutoRazer Paneli Kuruldu",
+        title="⚙️ AutoRazer Butonlu Paneli Kuruldu",
         description=f"Kanıt kanalları oluşturuldu:\n\n• {boost_kanali.mention}\n• {bio_kanali.mention}\n\n*Not: `/rolayarla` ile rolleri bağlamayı unutma!*",
         color=discord.Color.blue()
     )
